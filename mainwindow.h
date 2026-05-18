@@ -12,10 +12,6 @@ class MainWindow;
 }
 QT_END_NAMESPACE
 
-#ifdef HAS_AXCONTAINER
-#include <QAxObject>
-#endif
-
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -53,7 +49,6 @@ private:
     double stringToDouble(const QString &s, bool *ok) const;  //Замена запятой на точку
     void loadCsvData(const QString &path);
     void executeSaveCsv(const QString &path);
-    void executeSaveExcel(const QString &path);
     void logStatus(const QString &message) const;
     std::vector<double> getSelectedNumbers() const;  //Сбор чисел из выделенных ячеек
 };

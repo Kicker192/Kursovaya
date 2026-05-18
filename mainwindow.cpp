@@ -11,6 +11,40 @@
 #include <QtCharts/QChartView>
 #include <QtCharts/QLineSeries>
 
+namespace {
+constexpr int FirstRowCount = 100;
+constexpr int FirstColumnCount = 50;
+}
+// Парсер строки CSV
+QStringList parseCsvLine(const QString &line)
+{
+    QStringList result;
+    QString currentField;
+    bool inQuotes = false; // Флаг нахождения внутри кавычек
+
+    for (int i = 0; i < line.length(); ++i) {
+        QChar ch = line[i];
+
+        if (ch == '"') {
+            // Переключаем режим "внутри кавычек" при встрече символа "
+            inQuotes = !inQuotes;
+        }
+        else if (ch == ',' && !inQuotes) {
+            // Запятая снаружи кавычек является разделителем колонок
+            result.append(currentField.trimmed());
+            currentField.clear();
+        }
+        else {
+            // Символы (включая запятые внутри кавычек) собираются в значение ячейки
+            currentField.append(ch);
+        }
+    }
+
+    // Добавление последнего поля строки после завершения цикла
+    result.append(currentField.trimmed());
+    return result;
+}
+
 //Конструктор главного окна
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -18,8 +52,8 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    ui->tableWidget->setRowCount(100);
-    ui->tableWidget->setColumnCount(50);
+    ui->tableWidget->setRowCount(FirstRowCount);
+    ui->tableWidget->setColumnCount(FirstColumnCount);
 
     //Подключение сигналов к слотам
     connect(ui->btnOpen, &QPushButton::clicked, this, &MainWindow::onLoadCsv);
@@ -98,7 +132,7 @@ void MainWindow::onLoadCsv()
     loadCsvData(path);
 }
 
-//Загрузка и парсинг CSV файла
+//Загрузка CSV файла
 void MainWindow::loadCsvData(const QString &path)
 {
     QFile file(path);
@@ -117,7 +151,7 @@ void MainWindow::loadCsvData(const QString &path)
         QString currentLine = ts.readLine();
         if (currentLine.isEmpty()) continue;
 
-        QStringList columns = currentLine.split(",");
+        QStringList columns = parseCsvLine(currentLine);
 
         //Автоматическое расширение таблицы
         if (tableRow >= ui->tableWidget->rowCount()) {
@@ -137,31 +171,16 @@ void MainWindow::loadCsvData(const QString &path)
     logStatus("Загружено строк: " + QString::number(tableRow));
 }
 
-//Сохранение данных (выбор формата)
+//Сохранение данных
+
 void MainWindow::onSaveData()
 {
     logStatus("Экспорт данных...");
-
-#ifdef HAS_AXCONTAINER
-    QString filters = "CSV файл (*.csv);;Excel документ (*.xlsx)";
-#else
     QString filters = "CSV файл (*.csv)";
-#endif
-
     QString selectedFilter;
     QString path = QFileDialog::getSaveFileName(this, "Сохранить таблицу", "", filters, &selectedFilter);
-
     if (path.isEmpty()) return;
-
-#ifdef HAS_AXCONTAINER
-    if (selectedFilter.contains(".xlsx")) {
-        executeSaveExcel(path);
-    } else {
-        executeSaveCsv(path);
-    }
-#else
     executeSaveCsv(path);
-#endif
 }
 
 //Экспорт в CSV
@@ -239,27 +258,29 @@ void MainWindow::onCalculateMean()
                              "Среднее: " + QString::number(sum / numbers.size()));
 }
 
-//Вычисление среднеквадратического отклонения
+// Вычисление среднеквадратического отклонения
 void MainWindow::onCalculateSKO()
 {
     logStatus("Расчет СКО...");
     auto numbers = getSelectedNumbers();
-
+    //Защита, т.к на ноль делить нельзя
     if (numbers.size() < 2) {
-        QMessageBox::warning(this, "Мало данных", "Нужно минимум 2 числа");
+        QMessageBox::warning(this, "Мало данных", "Необходимо хотя бы 2 числа");
         return;
     }
-
     double sum = 0;
-    for (double x : numbers) sum += x;
+    for (double x : numbers)
+    {
+        sum += x;
+    }
     double mean = sum / numbers.size();
-
     double varSum = 0;
-    for (double x : numbers) varSum += pow(x - mean, 2);
-
-    double sko = sqrt(varSum / numbers.size());
-    QMessageBox::information(this, "СКО",
-                             "СКО: " + QString::number(sko));
+    for (double x : numbers) {
+        varSum += pow(x - mean, 2);
+    }
+    //Делим на (n - 1)
+    double sko = sqrt(varSum / (numbers.size() - 1));
+    QMessageBox::information(this, "Результат", "СКО: " + QString::number(sko));
 }
 
 //Вычисление медианы
@@ -392,7 +413,7 @@ void MainWindow::onShowChart()
             QLineSeries *series = new QLineSeries();
             QString label = ui->tableWidget->horizontalHeaderItem(c)
                                 ? ui->tableWidget->horizontalHeaderItem(c)->text()
-                                : "Кол. " + QString::number(c + 1);
+                                : "Столбец " + QString::number(c + 1);
             series->setName(label);
             for (int r = range.topRow(); r <= range.bottomRow(); r++) {
                 if (hasValidData(r, c)) {
